@@ -31,7 +31,7 @@ func TestStrategyGenerate(t *testing.T) {
 				}
 				actual := actions[1].(clienttesting.CreateAction).GetObject().(*userapi.User)
 				if expected := makeUser("", "bob", "idp:bob"); !equality.Semantic.DeepEqual(expected, actual) {
-					t.Error(diff.ObjectDiff(expected, actual))
+					t.Error(diff.Diff(expected, actual))
 				}
 			},
 			ExpectedUserName:   "bob",
@@ -59,7 +59,7 @@ func TestStrategyGenerate(t *testing.T) {
 				}
 				actual := actions[2].(clienttesting.CreateAction).GetObject().(*userapi.User)
 				if expected := makeUser("", "bob2", "idp:bob"); !equality.Semantic.DeepEqual(expected, actual) {
-					t.Error(diff.ObjectDiff(expected, actual))
+					t.Error(diff.Diff(expected, actual))
 				}
 			},
 			ExpectedUserName:   "bob2",
@@ -87,7 +87,7 @@ func TestStrategyGenerate(t *testing.T) {
 				}
 				actual := actions[2].(clienttesting.CreateAction).GetObject().(*userapi.User)
 				if expected := makeUser("", "bob2", "idp:bob"); !equality.Semantic.DeepEqual(expected, actual) {
-					t.Error(diff.ObjectDiff(expected, actual))
+					t.Error(diff.Diff(expected, actual))
 				}
 			},
 			ExpectedUserName:   "bob2",
@@ -121,7 +121,7 @@ func TestStrategyGenerate(t *testing.T) {
 				}
 				actual := actions[3].(clienttesting.CreateAction).GetObject().(*userapi.User)
 				if expected := makeUser("", "bob3", "idp:bob"); !equality.Semantic.DeepEqual(expected, actual) {
-					t.Error(diff.ObjectDiff(expected, actual))
+					t.Error(diff.Diff(expected, actual))
 				}
 			},
 

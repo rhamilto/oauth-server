@@ -147,13 +147,14 @@ func TestRequestHeader(t *testing.T) {
 }
 
 func verifyAnnotations(t *testing.T, req *http.Request, want string) error {
-	ev := kaudit.AuditEventFrom(req.Context())
+	ac := kaudit.AuditContextFrom(req.Context())
+	annotations := ac.GetEventAnnotations()
 
-	if len(ev.Annotations) == 0 {
-		return fmt.Errorf("ev.Annotations is empty")
+	if len(annotations) == 0 {
+		return fmt.Errorf("annotations is empty")
 	}
 
-	have, ok := ev.Annotations[audit.UsernameAnnotation]
+	have, ok := annotations[audit.UsernameAnnotation]
 	if !ok {
 		return fmt.Errorf("Didn't find %s", audit.UsernameAnnotation)
 	}

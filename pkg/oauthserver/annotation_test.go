@@ -39,13 +39,14 @@ func withUsernameAnnotation(want string) func(*testing.T, map[string]string) {
 type annotationChecker func(*testing.T, map[string]string)
 
 func verifyAnnotations(t *testing.T, req *http.Request, checker []annotationChecker) {
-	ev := kaudit.AuditEventFrom(req.Context())
+	ac := kaudit.AuditContextFrom(req.Context())
+	annotations := ac.GetEventAnnotations()
 
-	if len(ev.Annotations) == 0 {
-		t.Error(errors.New("ev.Annotations is empty"))
+	if len(annotations) == 0 {
+		t.Error(errors.New("annotations is empty"))
 	}
 
 	for _, check := range checker {
-		check(t, ev.Annotations)
+		check(t, annotations)
 	}
 }

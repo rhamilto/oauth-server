@@ -11,7 +11,6 @@ import (
 	"github.com/openshift/oauth-server/pkg/oauth/handlers"
 	"github.com/openshift/oauth-server/pkg/server/csrf"
 	"github.com/openshift/osincli"
-	auditapi "k8s.io/apiserver/pkg/apis/audit"
 	"k8s.io/apiserver/pkg/audit"
 	"k8s.io/apiserver/pkg/authentication/user"
 )
@@ -24,25 +23,25 @@ func TestHandler(t *testing.T) {
 
 func TestHandlerLogin(t *testing.T) {
 	t.Run("audit", func(t *testing.T) {
-		type checkFunc func(*auditapi.Event, authenticationHandler, *userIdentityMapper) error
+		type checkFunc func(map[string]string, authenticationHandler, *userIdentityMapper) error
 
 		eventHasUsername := func(want string) checkFunc {
-			return func(ev *auditapi.Event, _ authenticationHandler, _ *userIdentityMapper) error {
-				if have := ev.Annotations["authentication.openshift.io/username"]; want != have {
+			return func(annotations map[string]string, _ authenticationHandler, _ *userIdentityMapper) error {
+				if have := annotations["authentication.openshift.io/username"]; want != have {
 					return fmt.Errorf("expected username %q, found %q", want, have)
 				}
 				return nil
 			}
 		}
 		eventHasDecision := func(want string) checkFunc {
-			return func(ev *auditapi.Event, _ authenticationHandler, _ *userIdentityMapper) error {
-				if have := ev.Annotations["authentication.openshift.io/decision"]; want != have {
+			return func(annotations map[string]string, _ authenticationHandler, _ *userIdentityMapper) error {
+				if have := annotations["authentication.openshift.io/decision"]; want != have {
 					return fmt.Errorf("expected decision %q, found %q", want, have)
 				}
 				return nil
 			}
 		}
-		isAuthorized := func(_ *auditapi.Event, h authenticationHandler, _ *userIdentityMapper) error {
+		isAuthorized := func(_ map[string]string, h authenticationHandler, _ *userIdentityMapper) error {
 			if !h.success {
 				return fmt.Errorf("expected call to success handler did not happen")
 			}
@@ -51,7 +50,7 @@ func TestHandlerLogin(t *testing.T) {
 			}
 			return nil
 		}
-		isNotAuthorized := func(_ *auditapi.Event, h authenticationHandler, _ *userIdentityMapper) error {
+		isNotAuthorized := func(_ map[string]string, h authenticationHandler, _ *userIdentityMapper) error {
 			if !h.failure {
 				return fmt.Errorf("expected call to error handler did not happen")
 			}
@@ -60,7 +59,7 @@ func TestHandlerLogin(t *testing.T) {
 			}
 			return nil
 		}
-		mapperWasNotCalled := func(_ *auditapi.Event, _ authenticationHandler, m *userIdentityMapper) error {
+		mapperWasNotCalled := func(_ map[string]string, _ authenticationHandler, m *userIdentityMapper) error {
 			if m.wasCalled {
 				return fmt.Errorf("the identity mapper was called upon unsuccessful auth")
 			}
@@ -141,9 +140,10 @@ func TestHandlerLogin(t *testing.T) {
 
 				h.login(httptest.NewRecorder(), req, nil, "state")
 
-				ev := audit.AuditEventFrom(req.Context())
+				ac := audit.AuditContextFrom(req.Context())
+				annotations := ac.GetEventAnnotations()
 				for _, check := range tc.checks {
-					if err := check(ev, *authHandler, identityMapper); err != nil {
+					if err := check(annotations, *authHandler, identityMapper); err != nil {
 						t.Error(err)
 					}
 				}
