@@ -423,7 +423,7 @@ func watchForGroupEvents(
 				return
 			}
 			if !equality.Semantic.DeepEqual(expectedGroup, group) {
-				failChan <- fmt.Sprintf("the expected group is different from the actual: %s", diff.ObjectDiff(expectedGroup, group))
+				failChan <- fmt.Sprintf("the expected group is different from the actual: %s", diff.Diff(expectedGroup, group))
 				return
 			}
 			if expectedEventType != groupEvent.Type {

@@ -12,14 +12,15 @@ import (
 )
 
 func verifyAnnotations(t *testing.T, req *http.Request, want map[string]string) {
-	ev := kaudit.AuditEventFrom(req.Context())
+	ac := kaudit.AuditContextFrom(req.Context())
+	annotations := ac.GetEventAnnotations()
 
-	if len(ev.Annotations) == 0 {
-		t.Error(errors.New("ev.Annotations is empty"))
+	if len(annotations) == 0 {
+		t.Error(errors.New("annotations is empty"))
 	}
 
 	for k, v := range want {
-		if ea, ok := ev.Annotations[k]; !ok || ea != v {
+		if ea, ok := annotations[k]; !ok || ea != v {
 			t.Error(fmt.Errorf("have: %s, want: %s", ea, v))
 		}
 	}

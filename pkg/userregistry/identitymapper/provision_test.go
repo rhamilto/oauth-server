@@ -85,7 +85,7 @@ func TestProvision(t *testing.T) {
 				}
 				actual := actions[1].(clienttesting.CreateAction).GetObject().(*userapi.Identity)
 				if expected := makeIdentity("", "idp", "bob", "bobUserUID", "bob"); !equality.Semantic.DeepEqual(expected, actual) {
-					t.Error(diff.ObjectDiff(expected, actual))
+					t.Error(diff.Diff(expected, actual))
 				}
 			},
 			ExpectedUserName: "bob",
@@ -116,7 +116,7 @@ func TestProvision(t *testing.T) {
 				}
 				actual := actions[2].(clienttesting.CreateAction).GetObject().(*userapi.Identity)
 				if expected := makeIdentity("", "idp", "bob", "bobUserUID", "bob"); !equality.Semantic.DeepEqual(expected, actual) {
-					t.Error(diff.ObjectDiff(expected, actual))
+					t.Error(diff.Diff(expected, actual))
 				}
 			},
 			ExpectedUserName: "bob",
@@ -147,7 +147,7 @@ func TestProvision(t *testing.T) {
 				}
 				actual := actions[2].(clienttesting.CreateAction).GetObject().(*userapi.Identity)
 				if expected := makeIdentity("", "idp", "bob", "bobUserUID", "bob"); !equality.Semantic.DeepEqual(expected, actual) {
-					t.Error(diff.ObjectDiff(expected, actual))
+					t.Error(diff.Diff(expected, actual))
 				}
 			},
 			ExpectedUserName: "bob",
