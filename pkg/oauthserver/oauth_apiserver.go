@@ -2,6 +2,7 @@ package oauthserver
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -180,6 +181,12 @@ func NewOAuthServerConfig(oauthConfig osinv1.OAuthConfig, userClientConfig *rest
 			},
 		},
 	}
+
+	ret.ExtraOAuthConfig.postStartHooks["openshift.io-StartDynamicCAWatchers"] = func(ctx genericapiserver.PostStartHookContext) error {
+		ret.ExtraOAuthConfig.startDynamicCAWatchers(ctx)
+		return nil
+	}
+
 	genericConfig.BuildHandlerChainFunc = ret.buildHandlerChainForOAuth
 
 	return ret, nil
@@ -282,6 +289,17 @@ type ExtraOAuthConfig struct {
 	TokenReviewClient       authenticationv1client.TokenReviewInterface
 
 	postStartHooks map[string]genericapiserver.PostStartHookFunc
+
+	// dynamicTransports collects transports that watch the proxy CA file
+	// for hot-reload. Populated by transportForInner during handler init,
+	// then started via the StartDynamicCAWatchers post-start hook.
+	dynamicTransports []*dynamicCARoundTripper
+}
+
+func (e *ExtraOAuthConfig) startDynamicCAWatchers(ctx context.Context) {
+	for _, rt := range e.dynamicTransports {
+		go rt.run(ctx)
+	}
 }
 
 type OAuthServerConfig struct {

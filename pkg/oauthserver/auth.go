@@ -455,7 +455,7 @@ func (c *OAuthServerConfig) getAuthenticationHandler(mux oauthserver.Mux, errorH
 func (c *OAuthServerConfig) getOAuthProvider(identityProvider osinv1.IdentityProvider) (external.Provider, error) {
 	switch provider := identityProvider.Provider.Object.(type) {
 	case *osinv1.GitHubIdentityProvider:
-		transport, err := transportFor(provider.CA, "", "")
+		transport, err := c.transportFor(provider.CA, "", "")
 		if err != nil {
 			return nil, err
 		}
@@ -466,7 +466,7 @@ func (c *OAuthServerConfig) getOAuthProvider(identityProvider osinv1.IdentityPro
 		return github.NewProvider(identityProvider.Name, provider.ClientID, clientSecret, provider.Hostname, transport, provider.Organizations, provider.Teams), nil
 
 	case *osinv1.GitLabIdentityProvider:
-		transport, err := transportFor(provider.CA, "", "")
+		transport, err := c.transportFor(provider.CA, "", "")
 		if err != nil {
 			return nil, err
 		}
@@ -477,7 +477,7 @@ func (c *OAuthServerConfig) getOAuthProvider(identityProvider osinv1.IdentityPro
 		return gitlab.NewProvider(identityProvider.Name, provider.URL, provider.ClientID, clientSecret, transport, provider.Legacy)
 
 	case *osinv1.GoogleIdentityProvider:
-		transport, err := transportFor("", "", "")
+		transport, err := c.transportFor("", "", "")
 		if err != nil {
 			return nil, err
 		}
@@ -488,7 +488,7 @@ func (c *OAuthServerConfig) getOAuthProvider(identityProvider osinv1.IdentityPro
 		return google.NewProvider(identityProvider.Name, provider.ClientID, clientSecret, provider.HostedDomain, transport)
 
 	case *osinv1.OpenIDIdentityProvider:
-		transport, err := transportFor(provider.CA, "", "")
+		transport, err := c.transportFor(provider.CA, "", "")
 		if err != nil {
 			return nil, err
 		}
@@ -592,7 +592,7 @@ func (c *OAuthServerConfig) getPasswordAuthenticator(identityProvider osinv1.Ide
 		if len(connectionInfo.URL) == 0 {
 			return nil, fmt.Errorf("URL is required for BasicAuthPasswordIdentityProvider")
 		}
-		transport, err := transportFor(connectionInfo.CA, connectionInfo.CertInfo.CertFile, connectionInfo.CertInfo.KeyFile)
+		transport, err := c.transportFor(connectionInfo.CA, connectionInfo.CertInfo.CertFile, connectionInfo.CertInfo.KeyFile)
 		if err != nil {
 			return nil, fmt.Errorf("Error building BasicAuthPasswordIdentityProvider client: %v", err)
 		}
@@ -603,7 +603,7 @@ func (c *OAuthServerConfig) getPasswordAuthenticator(identityProvider osinv1.Ide
 		if len(connectionInfo.URL) == 0 {
 			return nil, fmt.Errorf("URL is required for KeystonePasswordIdentityProvider")
 		}
-		transport, err := transportFor(connectionInfo.CA, connectionInfo.CertInfo.CertFile, connectionInfo.CertInfo.KeyFile)
+		transport, err := c.transportFor(connectionInfo.CA, connectionInfo.CertInfo.CertFile, connectionInfo.CertInfo.KeyFile)
 		if err != nil {
 			return nil, fmt.Errorf("Error building KeystonePasswordIdentityProvider client: %v", err)
 		}
@@ -762,17 +762,23 @@ func (redirectSuccessHandler) AuthenticationSucceeded(user kuser.Info, then stri
 	return true, nil
 }
 
-// transportFor returns an http.Transport for the given ca and client cert (which may be empty strings)
-func transportFor(ca, certFile, keyFile string) (http.RoundTripper, error) {
-	transport, err := transportForInner(ca, certFile, keyFile)
+// transportFor returns an http.RoundTripper for the given CA and client cert
+// (which may be empty strings). When a proxy trusted CA is configured, each
+// call registers a new dynamic transport watcher. Only called during handler
+// initialization (via getOAuthProvider/getPasswordAuthenticator), never at
+// request time.
+func (c *OAuthServerConfig) transportFor(ca, certFile, keyFile string) (http.RoundTripper, error) {
+	transport, err := c.transportForInner(ca, certFile, keyFile)
 	if err != nil {
 		return nil, err
 	}
 	return ktransport.DebugWrappers(transport), nil
 }
 
-func transportForInner(ca, certFile, keyFile string) (http.RoundTripper, error) {
-	if len(ca) == 0 && len(certFile) == 0 && len(keyFile) == 0 {
+func (c *OAuthServerConfig) transportForInner(ca, certFile, keyFile string) (http.RoundTripper, error) {
+	proxyCA := c.ExtraOAuthConfig.Options.ProxyTrustedCA
+
+	if len(ca) == 0 && len(certFile) == 0 && len(keyFile) == 0 && len(proxyCA) == 0 {
 		return http.DefaultTransport, nil
 	}
 
@@ -780,7 +786,16 @@ func transportForInner(ca, certFile, keyFile string) (http.RoundTripper, error) 
 		return nil, errors.New("certFile and keyFile must be specified together")
 	}
 
-	// Copy default transport
+	if len(proxyCA) != 0 {
+		rt, err := newDynamicCARoundTripper(proxyCA, ca, certFile, keyFile)
+		if err != nil {
+			return nil, err
+		}
+		c.ExtraOAuthConfig.dynamicTransports = append(c.ExtraOAuthConfig.dynamicTransports, rt)
+		return rt, nil
+	}
+
+	// No proxy CA — static transport
 	transport := knet.SetTransportDefaults(&http.Transport{
 		TLSClientConfig: &tls.Config{},
 	})
