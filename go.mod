@@ -8,10 +8,10 @@ require (
 	github.com/go-ldap/ldap/v3 v3.4.11
 	github.com/gophercloud/gophercloud/v2 v2.4.0
 	github.com/gorilla/sessions v1.2.1
-	github.com/openshift/api v0.0.0-20260709183455-a3d85be7fdb1
+	github.com/openshift/api v0.0.0-20260710200753-d8a1748da7dc
 	github.com/openshift/build-machinery-go v0.0.0-20251023084048-5d77c1a5e5af
-	github.com/openshift/client-go v0.0.0-20251205093018-96a6cbc1420c
-	github.com/openshift/library-go v0.0.0-20260309173530-9ed71ac3148f
+	github.com/openshift/client-go v0.0.0-20260703082747-24d059aea27a
+	github.com/openshift/library-go v0.0.0-20260713084045-a99049bdd190
 	github.com/openshift/osin v1.0.2-0.20220317075346-0f4d38c6e53f
 	github.com/openshift/osincli v0.0.0-20160924135400-fababb0555f2
 	github.com/spf13/cobra v1.10.0
@@ -110,7 +110,7 @@ require (
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
-	golang.org/x/time v0.9.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/grpc v1.81.1 // indirect
