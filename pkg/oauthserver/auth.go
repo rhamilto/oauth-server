@@ -763,58 +763,17 @@ func (redirectSuccessHandler) AuthenticationSucceeded(user kuser.Info, then stri
 }
 
 // transportFor returns an http.RoundTripper for the given CA and client cert
-// (which may be empty strings). When a proxy trusted CA is configured, each
-// call registers a new dynamic transport watcher. Only called during handler
-// initialization (via getOAuthProvider/getPasswordAuthenticator), never at
-// request time.
+// (which may be empty strings). It delegates to the transport factory set at config init time.
 func (c *OAuthServerConfig) transportFor(ca, certFile, keyFile string) (http.RoundTripper, error) {
-	transport, err := c.transportForInner(ca, certFile, keyFile)
+	// transportBuilderFunc may be unset in tests and this seems like an acceptable solution
+	// rather than exporting newStaticRoundTripper and requiring the tests to set the field.
+	newTransport := c.ExtraOAuthConfig.transportBuilderFunc
+	if newTransport == nil {
+		newTransport = newStaticRoundTripper
+	}
+	transport, err := newTransport(ca, certFile, keyFile)
 	if err != nil {
 		return nil, err
 	}
 	return ktransport.DebugWrappers(transport), nil
-}
-
-func (c *OAuthServerConfig) transportForInner(ca, certFile, keyFile string) (http.RoundTripper, error) {
-	proxyCA := c.ExtraOAuthConfig.Options.ProxyTrustedCA
-
-	if len(ca) == 0 && len(certFile) == 0 && len(keyFile) == 0 && len(proxyCA) == 0 {
-		return http.DefaultTransport, nil
-	}
-
-	if (len(certFile) == 0) != (len(keyFile) == 0) {
-		return nil, errors.New("certFile and keyFile must be specified together")
-	}
-
-	if len(proxyCA) != 0 {
-		rt, err := newDynamicCARoundTripper(proxyCA, ca, certFile, keyFile)
-		if err != nil {
-			return nil, err
-		}
-		c.ExtraOAuthConfig.dynamicTransports = append(c.ExtraOAuthConfig.dynamicTransports, rt)
-		return rt, nil
-	}
-
-	// No proxy CA — static transport
-	transport := knet.SetTransportDefaults(&http.Transport{
-		TLSClientConfig: &tls.Config{},
-	})
-
-	if len(ca) != 0 {
-		roots, err := cert.NewPool(ca)
-		if err != nil {
-			return nil, fmt.Errorf("error loading cert pool from ca file %s: %v", ca, err)
-		}
-		transport.TLSClientConfig.RootCAs = roots
-	}
-
-	if len(certFile) != 0 {
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-		if err != nil {
-			return nil, fmt.Errorf("error loading x509 keypair from cert file %s and key file %s: %v", certFile, keyFile, err)
-		}
-		transport.TLSClientConfig.Certificates = []tls.Certificate{cert}
-	}
-
-	return transport, nil
 }

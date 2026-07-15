@@ -1,9 +1,9 @@
 package oauthserver
 
 import (
-	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync/atomic"
@@ -14,13 +14,13 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// dynamicCARoundTripper is an http.RoundTripper that watches a proxy CA file
-// for changes and rebuilds the underlying http.Transport when the CA rotates.
-// The transport's RootCAs combines a static IdP CA (from provider config) with
-// the dynamic proxy CA (from mounted ConfigMap). Static TLS material (IdP CA
-// certs and client certificate) is loaded once at construction time; only the
-// proxy CA is reloaded dynamically. It implements
-// dynamiccertificates.Listener to receive change notifications.
+// dynamicCARoundTripper is an http.RoundTripper that rebuilds the underlying
+// http.Transport when the proxy CA rotates. It implements
+// dynamiccertificates.Listener and registers on a shared
+// DynamicFileCAContent provided at construction time. The transport's RootCAs
+// combines a static IdP CA (from provider config) with the dynamic proxy CA.
+// Static TLS material (IdP CA certs and client certificate) is loaded once at
+// construction time; only the proxy CA is reloaded dynamically.
 type dynamicCARoundTripper struct {
 	proxyCAContent *dynamiccertificates.DynamicFileCAContent
 	idpCACerts     []*x509.Certificate
@@ -31,10 +31,9 @@ type dynamicCARoundTripper struct {
 var _ http.RoundTripper = &dynamicCARoundTripper{}
 var _ dynamiccertificates.Listener = &dynamicCARoundTripper{}
 
-func newDynamicCARoundTripper(proxyCAFile, idpCAFile, certFile, keyFile string) (*dynamicCARoundTripper, error) {
-	proxyCAContent, err := dynamiccertificates.NewDynamicCAContentFromFile("proxy-ca", proxyCAFile)
-	if err != nil {
-		return nil, fmt.Errorf("error loading proxy CA from %q: %w", proxyCAFile, err)
+func newDynamicCARoundTripper(proxyCAContent *dynamiccertificates.DynamicFileCAContent, idpCAFile, certFile, keyFile string) (*dynamicCARoundTripper, error) {
+	if (len(certFile) == 0) != (len(keyFile) == 0) {
+		return nil, errors.New("certFile and keyFile must be specified together")
 	}
 
 	rt := &dynamicCARoundTripper{
@@ -42,6 +41,7 @@ func newDynamicCARoundTripper(proxyCAFile, idpCAFile, certFile, keyFile string) 
 	}
 
 	if len(idpCAFile) != 0 {
+		var err error
 		rt.idpCACerts, err = cert.CertsFromFile(idpCAFile)
 		if err != nil {
 			return nil, fmt.Errorf("error loading IdP CA from %q: %w", idpCAFile, err)
@@ -106,8 +106,4 @@ func (rt *dynamicCARoundTripper) Enqueue() {
 
 func (rt *dynamicCARoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return rt.transport.Load().RoundTrip(req)
-}
-
-func (rt *dynamicCARoundTripper) run(ctx context.Context) {
-	rt.proxyCAContent.Run(ctx, 1)
 }
