@@ -455,7 +455,7 @@ func (c *OAuthServerConfig) getAuthenticationHandler(mux oauthserver.Mux, errorH
 func (c *OAuthServerConfig) getOAuthProvider(identityProvider osinv1.IdentityProvider) (external.Provider, error) {
 	switch provider := identityProvider.Provider.Object.(type) {
 	case *osinv1.GitHubIdentityProvider:
-		transport, err := transportFor(provider.CA, "", "")
+		transport, err := c.transportFor(provider.CA, "", "")
 		if err != nil {
 			return nil, err
 		}
@@ -466,7 +466,7 @@ func (c *OAuthServerConfig) getOAuthProvider(identityProvider osinv1.IdentityPro
 		return github.NewProvider(identityProvider.Name, provider.ClientID, clientSecret, provider.Hostname, transport, provider.Organizations, provider.Teams), nil
 
 	case *osinv1.GitLabIdentityProvider:
-		transport, err := transportFor(provider.CA, "", "")
+		transport, err := c.transportFor(provider.CA, "", "")
 		if err != nil {
 			return nil, err
 		}
@@ -477,7 +477,7 @@ func (c *OAuthServerConfig) getOAuthProvider(identityProvider osinv1.IdentityPro
 		return gitlab.NewProvider(identityProvider.Name, provider.URL, provider.ClientID, clientSecret, transport, provider.Legacy)
 
 	case *osinv1.GoogleIdentityProvider:
-		transport, err := transportFor("", "", "")
+		transport, err := c.transportFor("", "", "")
 		if err != nil {
 			return nil, err
 		}
@@ -488,7 +488,7 @@ func (c *OAuthServerConfig) getOAuthProvider(identityProvider osinv1.IdentityPro
 		return google.NewProvider(identityProvider.Name, provider.ClientID, clientSecret, provider.HostedDomain, transport)
 
 	case *osinv1.OpenIDIdentityProvider:
-		transport, err := transportFor(provider.CA, "", "")
+		transport, err := c.transportFor(provider.CA, "", "")
 		if err != nil {
 			return nil, err
 		}
@@ -592,7 +592,7 @@ func (c *OAuthServerConfig) getPasswordAuthenticator(identityProvider osinv1.Ide
 		if len(connectionInfo.URL) == 0 {
 			return nil, fmt.Errorf("URL is required for BasicAuthPasswordIdentityProvider")
 		}
-		transport, err := transportFor(connectionInfo.CA, connectionInfo.CertInfo.CertFile, connectionInfo.CertInfo.KeyFile)
+		transport, err := c.transportFor(connectionInfo.CA, connectionInfo.CertInfo.CertFile, connectionInfo.CertInfo.KeyFile)
 		if err != nil {
 			return nil, fmt.Errorf("Error building BasicAuthPasswordIdentityProvider client: %v", err)
 		}
@@ -603,7 +603,7 @@ func (c *OAuthServerConfig) getPasswordAuthenticator(identityProvider osinv1.Ide
 		if len(connectionInfo.URL) == 0 {
 			return nil, fmt.Errorf("URL is required for KeystonePasswordIdentityProvider")
 		}
-		transport, err := transportFor(connectionInfo.CA, connectionInfo.CertInfo.CertFile, connectionInfo.CertInfo.KeyFile)
+		transport, err := c.transportFor(connectionInfo.CA, connectionInfo.CertInfo.CertFile, connectionInfo.CertInfo.KeyFile)
 		if err != nil {
 			return nil, fmt.Errorf("Error building KeystonePasswordIdentityProvider client: %v", err)
 		}
@@ -762,44 +762,18 @@ func (redirectSuccessHandler) AuthenticationSucceeded(user kuser.Info, then stri
 	return true, nil
 }
 
-// transportFor returns an http.Transport for the given ca and client cert (which may be empty strings)
-func transportFor(ca, certFile, keyFile string) (http.RoundTripper, error) {
-	transport, err := transportForInner(ca, certFile, keyFile)
+// transportFor returns an http.RoundTripper for the given CA and client cert
+// (which may be empty strings). It delegates to the transport factory set at config init time.
+func (c *OAuthServerConfig) transportFor(ca, certFile, keyFile string) (http.RoundTripper, error) {
+	// transportBuilderFunc may be unset in tests and this seems like an acceptable solution
+	// rather than exporting newStaticRoundTripper and requiring the tests to set the field.
+	newTransport := c.ExtraOAuthConfig.transportBuilderFunc
+	if newTransport == nil {
+		newTransport = newStaticRoundTripper
+	}
+	transport, err := newTransport(ca, certFile, keyFile)
 	if err != nil {
 		return nil, err
 	}
 	return ktransport.DebugWrappers(transport), nil
-}
-
-func transportForInner(ca, certFile, keyFile string) (http.RoundTripper, error) {
-	if len(ca) == 0 && len(certFile) == 0 && len(keyFile) == 0 {
-		return http.DefaultTransport, nil
-	}
-
-	if (len(certFile) == 0) != (len(keyFile) == 0) {
-		return nil, errors.New("certFile and keyFile must be specified together")
-	}
-
-	// Copy default transport
-	transport := knet.SetTransportDefaults(&http.Transport{
-		TLSClientConfig: &tls.Config{},
-	})
-
-	if len(ca) != 0 {
-		roots, err := cert.NewPool(ca)
-		if err != nil {
-			return nil, fmt.Errorf("error loading cert pool from ca file %s: %v", ca, err)
-		}
-		transport.TLSClientConfig.RootCAs = roots
-	}
-
-	if len(certFile) != 0 {
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-		if err != nil {
-			return nil, fmt.Errorf("error loading x509 keypair from cert file %s and key file %s: %v", certFile, keyFile, err)
-		}
-		transport.TLSClientConfig.Certificates = []tls.Certificate{cert}
-	}
-
-	return transport, nil
 }

@@ -15,6 +15,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	genericapiserver "k8s.io/apiserver/pkg/server"
+	"k8s.io/apiserver/pkg/server/dynamiccertificates"
 	kclientset "k8s.io/client-go/kubernetes"
 	authenticationv1client "k8s.io/client-go/kubernetes/typed/authentication/v1"
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -180,6 +181,11 @@ func NewOAuthServerConfig(oauthConfig osinv1.OAuthConfig, userClientConfig *rest
 			},
 		},
 	}
+
+	if err := configureTransport(&ret.ExtraOAuthConfig, oauthConfig.ProxyTrustedCA); err != nil {
+		return nil, err
+	}
+
 	genericConfig.BuildHandlerChainFunc = ret.buildHandlerChainForOAuth
 
 	return ret, nil
@@ -282,6 +288,32 @@ type ExtraOAuthConfig struct {
 	TokenReviewClient       authenticationv1client.TokenReviewInterface
 
 	postStartHooks map[string]genericapiserver.PostStartHookFunc
+
+	// transportBuilderFunc creates an http.RoundTripper for outbound IdP requests.
+	// Set at init time by configureTransport: when a proxy CA is configured, it produces
+	// dynamicCARoundTrippers that share a single file watcher; otherwise it produces static transports.
+	transportBuilderFunc func(ca, certFile, keyFile string) (http.RoundTripper, error)
+}
+
+func configureTransport(config *ExtraOAuthConfig, proxyCAFile string) error {
+	if len(proxyCAFile) == 0 {
+		config.transportBuilderFunc = newStaticRoundTripper
+		return nil
+	}
+
+	proxyCAContent, err := dynamiccertificates.NewDynamicCAContentFromFile("proxy-ca", proxyCAFile)
+	if err != nil {
+		return fmt.Errorf("error loading proxy CA from %q: %w", proxyCAFile, err)
+	}
+
+	config.transportBuilderFunc = func(ca, certFile, keyFile string) (http.RoundTripper, error) {
+		return newDynamicCARoundTripper(proxyCAContent, ca, certFile, keyFile)
+	}
+	config.postStartHooks["openshift.io-StartProxyCAWatcher"] = func(ctx genericapiserver.PostStartHookContext) error {
+		go proxyCAContent.Run(ctx, 1)
+		return nil
+	}
+	return nil
 }
 
 type OAuthServerConfig struct {
